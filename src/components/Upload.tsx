@@ -6,6 +6,8 @@ import { v4 as uuid } from "uuid";
 import { Progress } from "./ui/progress"
 import { useIsFile } from "../hooks/useIsFile";
 import { useThemeStore } from "../stores/useThemeStore";
+import { useUploadAndDownloadLock } from "../stores/useUploadAndDownloadLock";
+import { toast } from 'sonner'
 
 type UploadProps = {
   setUploadDone: React.Dispatch<React.SetStateAction<boolean>>
@@ -13,6 +15,7 @@ type UploadProps = {
 
 const Upload = ({ setUploadDone }: UploadProps) => {
   const { checkFile } = useIsFile()
+  const {setIsUploadindOrDownloading} = useUploadAndDownloadLock()
   const {theme} = useThemeStore()
   const [chunkSize, setChunk] = useState<number>(0);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -34,10 +37,11 @@ const Upload = ({ setUploadDone }: UploadProps) => {
     getChunkSize();
   }, []);
 
-  const generateFileId = async (file: File) => {
+  const handleFileUpload = async (file: File) => {
     if (isUploading) return;
     
     setIsUploading(true);
+    setIsUploadindOrDownloading(true)
     setUploadError(null);
     
     try {
@@ -61,6 +65,7 @@ const Upload = ({ setUploadDone }: UploadProps) => {
       console.error(e);
       setUploadError("Upload failed. Please try again.");
       setIsUploading(false);
+      setIsUploadindOrDownloading(false)
     }
   };
 
@@ -69,6 +74,7 @@ const Upload = ({ setUploadDone }: UploadProps) => {
     if (isFile) {
       setUploadError("File already exists");
       setIsUploading(false)
+      setIsUploadindOrDownloading(false)
       return 
     }
 
@@ -93,9 +99,7 @@ const Upload = ({ setUploadDone }: UploadProps) => {
         formData.append("chunk", chunk);
 
         await axios.post("http://localhost:5000/file/upload", formData, {
-          headers: {
-            Authorization: "Bearer " + "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJ1c2VyX2lkIjoiMThlMzcyYzctNWZiMy00OGI3LTliNTYtZDgzOTUzZDY5NjhiIiwicGhvbmUiOiIrMjM0OTA2NzY3ODUwNyIsImV4cCI6MTc1NjkyOTE1OX0.NxeUqOkCgWrsCVfKNGcnWcUSggDZlbuwpQxOW8WhWbY",
-          },
+          withCredentials: true,
           onUploadProgress: (event: any) => {
             if (event.total) {
               const chunkProgress = event.loaded;
@@ -123,6 +127,9 @@ const Upload = ({ setUploadDone }: UploadProps) => {
       setUploadError("Upload failed. Please try again.");
       setProgress(0);
       setIsUploading(false);
+    } finally {
+      toast.success("Upload process completed.")
+      setIsUploadindOrDownloading(false)
     }
   };
 
@@ -149,7 +156,7 @@ const Upload = ({ setUploadDone }: UploadProps) => {
   });
 
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div className="max-w-4xl mx-auto sm:px-6 lg:px-8">
       <div className={`${theme === 'dark' && 'bg-gray-900 border-gray-900'} bg-white rounded-3xl shadow-lg border border-gray-100 overflow-hidden`}>
         <div className={` ${theme === 'dark' ? 'bg-gray-900 border-gray-900 border-b text-gray-200' : 'bg-gradient-to-r from-gray-50 to-gray-100 border-b border-gray-100 text-gray-900'} p-6 sm:p-8`}>
           <h2 className="text-2xl sm:text-3xl font-bold text-start">
@@ -167,7 +174,7 @@ const Upload = ({ setUploadDone }: UploadProps) => {
               isDragActive
                 ? 'border-blue-400 bg-blue-50 scale-[1.02]'
                 : selectedFile
-                ? 'border-green-300 bg-green-50'
+                ? `${theme === "dark" ? "bg-green-900/20 border-green-950": "border-green-300 bg-green-50"}`
                 : `${theme === 'dark' && 'hover:bg-gray-900 hover:border-gray-900'} border-gray-300 bg-gray-50 hover:border-gray-400 hover:bg-gray-100`
             }`}
           >
@@ -216,19 +223,19 @@ const Upload = ({ setUploadDone }: UploadProps) => {
                 </div>
                 
                 <div className="space-y-3">
-                  <h3 className="text-lg sm:text-xl lg:text-2xl font-semibold text-gray-900">
+                  <h3 className={`text-lg sm:text-xl lg:text-2xl font-semibold ${theme === "dark" ? "text-gray-100" : "text-gray-900"}`}>
                     File Ready to Upload
                   </h3>
                   
                   {/* File Details Card */}
-                  <div className="bg-white rounded-2xl p-4 sm:p-6 shadow-sm border border-gray-100 max-w-md mx-auto">
+                  <div className={`${theme === "dark" ? "bg-gray-800 border-gray-600" : "bg-white border-gray-100"} rounded-2xl p-4 sm:p-6 shadow-sm border  max-w-md mx-auto`}>
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex items-center space-x-3 flex-1 min-w-0">
-                        <div className="w-10 h-10 bg-gradient-to-br from-gray-100 to-gray-200 rounded-lg flex items-center justify-center">
+                        <div className={`w-10 h-10 bg-gradient-to-br ${theme === "dark" ? "from-gray-700 to gray-100" : "from-gray-100 to-gray-200"}  rounded-lg flex items-center justify-center`}>
                           <MdInsertDriveFile size={20} className="text-gray-600" />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="font-medium text-gray-900 truncate text-sm sm:text-base" title={selectedFile.name}>
+                          <p className={`font-medium ${theme === "dark" ? "text-gray-100" : "text-gray-900"}  truncate text-sm sm:text-base`} title={selectedFile.name}>
                             {selectedFile.name}
                           </p>
                           <p className="text-xs sm:text-sm text-gray-500 mt-1">
@@ -242,7 +249,7 @@ const Upload = ({ setUploadDone }: UploadProps) => {
                           e.stopPropagation();
                           removeFile();
                         }}
-                        className="w-8 h-8 bg-gray-100 hover:bg-red-100 rounded-lg flex items-center justify-center text-gray-500 hover:text-red-600 transition-all duration-200 flex-shrink-0"
+                        className={`w-8 h-8 ${theme === "dark" ? "bg-gradient-to-br from-gray-700 to gray-100 text-white hover:bg-red-800 hover:text-red-100" : "bg-gray-100 hover:bg-red-100 text-gray-500 hover:text-red-600"} rounded-lg flex items-center justify-center transition-all duration-200 flex-shrink-0`}
                         title="Remove file"
                       >
                         <MdClose size={16} />
@@ -278,8 +285,8 @@ const Upload = ({ setUploadDone }: UploadProps) => {
 
           {/* Error Message */}
           {uploadError && (
-            <div className="mt-6 p-4 bg-red-50 border border-red-200 rounded-xl">
-              <div className="flex items-center justify-between">
+            <div className={`px-6 sm:px-8 lg:px-12 pb-6 sm:pb-8 ${theme === "dark" ? "bg-gray-800 border-0" : "bg-white"}`}>
+              <div className={`flex items-center justify-between ${theme  === "dark" ? "bg-red-800/20 border-red-800 " : "bg-red-50 border border-red-200"}  rounded-xl p-4`}>
                 <p className="text-red-700 text-sm font-medium">{uploadError}</p>
                 <button
                   onClick={() => setUploadError(null)}
@@ -293,9 +300,9 @@ const Upload = ({ setUploadDone }: UploadProps) => {
       
         {/* Upload Button */}
         {selectedFile && !isUploading && (
-          <div className="px-6 sm:px-8 lg:px-12 pb-6 sm:pb-8">
+          <div className={`px-6 sm:px-8 lg:px-12 pb-6 sm:pb-8 ${theme === "dark" ? "bg-gray-800" : "bg-white"}`}>
             <button
-              onClick={() => generateFileId(selectedFile)}
+              onClick={() => handleFileUpload(selectedFile)}
               disabled={isUploading}
               className="w-full bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 disabled:from-gray-400 disabled:to-gray-500 text-white font-semibold py-4 sm:py-5 px-8 rounded-2xl shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 transform hover:scale-[1.02] disabled:hover:scale-100 transition-all duration-200 flex items-center justify-center space-x-3 text-sm sm:text-base"
             >
@@ -307,7 +314,7 @@ const Upload = ({ setUploadDone }: UploadProps) => {
 
         {/* Upload Complete State */}
         {progress === 100 && !uploadError && (
-          <div className="px-6 sm:px-8 lg:px-12 pb-6 sm:pb-8">
+          <div className={`px-6 sm:px-8 lg:px-12 pb-6 sm:pb-8 ${theme === "dark" ? "bg-gray-800" : "bg-white"}`}>
             <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-center">
               <div className="flex items-center justify-center space-x-2 text-green-700">
                 <MdCheckCircle size={20} />
@@ -317,22 +324,6 @@ const Upload = ({ setUploadDone }: UploadProps) => {
                 Your file has been encrypted and stored securely
               </p>
             </div>
-          </div>
-        )}
-      </div>
-
-      {/* Mobile-Optimized Alternative Button */}
-      <div className="block sm:hidden mt-6">
-        {selectedFile && !isUploading && (
-          <div className="fixed bottom-6 left-4 right-4 z-10">
-            <button
-              onClick={() => generateFileId(selectedFile)}
-              disabled={isUploading}
-              className="w-full bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 text-white font-semibold py-4 px-6 rounded-2xl shadow-lg shadow-blue-500/25 flex items-center justify-center space-x-3"
-            >
-              <MdCloudUpload size={20} />
-              <span>Upload File</span>
-            </button>
           </div>
         )}
       </div>

@@ -11,8 +11,7 @@ const ProcessFile = () => {
 
     return (
         <>
-            
-            <div className="min-h-screen flex">
+            <div className="min-h-screen flex flex-col">
                 <DashboardNav/>
                 <main className="flex-1 p-4 md:p-6 lg:p-8 mt-[3em]">
                     <div className="max-w-7xl mx-auto">

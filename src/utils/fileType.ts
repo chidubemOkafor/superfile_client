@@ -99,22 +99,22 @@ export const getFileTypeInfo = (fileName: string) => {
 export const getFileTypeBadge = (fileType: string) => {
     switch (fileType) {
         case 'image':
-            return 'bg-purple-100 text-purple-700 border border-purple-200';
+            return 'bg-purple-800/20 text-purple-700 border border-purple-900/20';
         case 'video':
-            return 'bg-red-100 text-red-700 border border-red-200';
+            return 'bg-red-800/20 text-red-700 border border-red-900/20';
         case 'audio':
-            return 'bg-green-100 text-green-700 border border-green-200';
+            return 'bg-green-800/20 text-green-700 border border-green-900/20';
         case 'pdf':
-            return 'bg-red-100 text-red-800 border border-red-200';
+            return 'bg-red-800/20 text-red-800 border border-red-900/20';
         case 'document':
-            return 'bg-blue-100 text-blue-700 border border-blue-200';
+            return 'bg-blue-800/20 text-blue-700 border border-blue-900/20';
         case 'spreadsheet':
-            return 'bg-emerald-100 text-emerald-700 border border-emerald-200';
+            return 'bg-emerald-800/20 text-emerald-700 border border-emerald-900/20';
         case 'archive':
-            return 'bg-orange-100 text-orange-700 border border-orange-200';
+            return 'bg-orange-800/20 text-orange-700 border border-orange-900/20';
         case 'code':
-            return 'bg-slate-100 text-slate-700 border border-slate-200';
+            return 'bg-slate-800/20 text-slate-700 border border-slate-900/20';
         default:
-            return 'bg-gray-100 text-gray-700 border border-gray-200';
+            return 'bg-gray-800/20 text-gray-700 border border-gray-900/20';
     }
 };

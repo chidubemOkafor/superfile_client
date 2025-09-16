@@ -1,6 +1,6 @@
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
-import dashboardImage from "../../assets/dashboard.png";
+import dashboardImage from "../../assets/dashboard2.png";
 
 const Hero = () => {
   return (

@@ -11,13 +11,17 @@ import { getFileTypeBadge, getFileTypeInfo } from "../utils/fileType";
 import { getFileExtension } from "../utils/getFileExtention";
 import { DeleteDialog } from "./DeleteDialog";
 import { useThemeStore } from "../stores/useThemeStore";
+import { useToggleActive } from "../stores/useToggleActive";
+import { useUploadAndDownloadLock } from "../stores/useUploadAndDownloadLock";
+import streamSaver from "streamsaver"
+import { toast } from "sonner";
 
-type YourFilesProps = {
+const YourFiles: React.FC<{
   uploadDone: boolean
-};
-
-const YourFiles: React.FC<YourFilesProps> = ({ uploadDone }) => {
+}> = ({ uploadDone }) => {
     const {theme} = useThemeStore()
+    const {active} = useToggleActive()
+    const {setIsUploadindOrDownloading} = useUploadAndDownloadLock()
     const [files, setFiles] = useState([])
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
     const [selectedFileId, setSelectedFileId] = useState<string | null>(null)
@@ -27,10 +31,9 @@ const YourFiles: React.FC<YourFilesProps> = ({ uploadDone }) => {
     const getFile = async() => {
         try {
             const response = await axios.get("http://localhost:5000/file/files", {
-                headers: {
-                    "Authorization": "Bearer " + "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJ1c2VyX2lkIjoiMThlMzcyYzctNWZiMy00OGI3LTliNTYtZDgzOTUzZDY5NjhiIiwicGhvbmUiOiIrMjM0OTA2NzY3ODUwNyIsImV4cCI6MTc1NjkyOTE1OX0.NxeUqOkCgWrsCVfKNGcnWcUSggDZlbuwpQxOW8WhWbY"
-                }
+                withCredentials: true,
             })
+            console.log(response)
             setFiles(response.data.files)
         } catch (error) {
             console.error(error)
@@ -39,37 +42,60 @@ const YourFiles: React.FC<YourFilesProps> = ({ uploadDone }) => {
 
     const downloadFile = async (fileId: string, fileName: string) => {
         setDownloading(fileId)
+        setIsUploadindOrDownloading(true)
+
         try {
-            const response = await axios.get(`http://localhost:5000/file/download?fileId=${fileId}`, {
-                responseType: "arraybuffer",
-                headers: {
-                    "Authorization": "Bearer " + "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJ1c2VyX2lkIjoiMThlMzcyYzctNWZiMy00OGI3LTliNTYtZDgzOTUzZDY5NjhiIiwicGhvbmUiOiIrMjM0OTA2NzY3ODUwNyIsImV4cCI6MTc1NjkyOTE1OX0.NxeUqOkCgWrsCVfKNGcnWcUSggDZlbuwpQxOW8WhWbY"
-                },
+            const response = await fetch(`http://localhost:5000/file/download?fileId=${fileId}`, {
+                credentials: "include",
             })
 
-            const blob = new Blob([response.data]);
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = fileName;
-            a.click();
-            URL.revokeObjectURL(url);
+            const contentLength = response.headers.get("content-length")
+
+            if (contentLength) {
+                console.log("File size (bytes):", contentLength)
+                console.log("File size (MB):", (Number(contentLength) / (1024*1024)).toFixed(2))
+            } else {
+                console.log("No content-length header provided")
+            }
+
+            if (!response.ok || !response.body) {
+                throw new Error(`Failed to download: ${response.statusText}`)
+            }
+
+            const fileStream = streamSaver.createWriteStream(fileName, {
+                size: Number(contentLength)
+            })
+
+            const writer = fileStream.getWriter()
+            const reader = response.body.getReader()
+
+            const pump = async (): Promise<void> => {
+                const { done, value } = await reader.read()
+                if (done) {
+                    writer.close()
+                    return
+                }
+                await writer.write(value)
+                return pump()
+            }
+
+            await pump()
         } catch (error) {
-            console.error(error)
+            console.error("Download failed:", error)
         } finally {
+            toast.success("Download process completed.")
+            setIsUploadindOrDownloading(false)
             setDownloading(null)
         }
     }
 
     const deleteFile = async () => {
         if (!selectedFileId) return
-        
+        setIsUploadindOrDownloading(true)
         setDeleting(true)
         try {
             await axios.delete(`http://localhost:5000/file/delete?fileId=${selectedFileId}`, {
-                headers: {
-                    "Authorization": "Bearer " + "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJ1c2VyX2lkIjoiMThlMzcyYzctNWZiMy00OGI3LTliNTYtZDgzOTUzZDY5NjhiIiwicGhvbmUiOiIrMjM0OTA2NzY3ODUwNyIsImV4cCI6MTc1NjkyOTE1OX0.NxeUqOkCgWrsCVfKNGcnWcUSggDZlbuwpQxOW8WhWbY"
-                },
+                withCredentials: true,
             })
         
             console.log("deleted")
@@ -78,6 +104,7 @@ const YourFiles: React.FC<YourFilesProps> = ({ uploadDone }) => {
             console.error(error)
         } finally {
             setDeleting(false)
+            setIsUploadindOrDownloading(false)
             setDeleteDialogOpen(false)
             setSelectedFileId(null)
         }
@@ -94,8 +121,12 @@ const YourFiles: React.FC<YourFilesProps> = ({ uploadDone }) => {
     }
 
     useEffect(() => {
+        console.log("toggled")
+    }, [active])
+
+    useEffect(() => {
         getFile()
-    }, [uploadDone])
+    }, [uploadDone, active])
 
     return (
         <div className={`${theme === 'dark' && 'bg-gray-900 border-gray-900'} bg-white rounded-3xl shadow-lg border border-gray-100 overflow-hidden`}>
@@ -108,7 +139,6 @@ const YourFiles: React.FC<YourFilesProps> = ({ uploadDone }) => {
                 </p>
             </div>
 
-            {/* Files List */}
             <div className={`p-4 sm:p-6 lg:p-8 ${theme === 'dark' && 'bg-gray-800 border-gray-900'}`}>
                 <div className="space-y-3 sm:space-y-4">
                     {files.map((file: any) => {
@@ -119,9 +149,8 @@ const YourFiles: React.FC<YourFilesProps> = ({ uploadDone }) => {
                         return (
                             <div 
                                 key={file.metadata.file_id} 
-                                className="bg-gray-50 hover:bg-gray-100 rounded-xl sm:rounded-2xl border border-gray-200 hover:border-gray-300 transition-all duration-200 p-3 sm:p-4"
+                                className={`${theme === "dark" ? "bg-gray-900 border-gray-800 hover:bg-gray-900/80" : "bg-gray-50 hover:bg-gray-100 border-gray-200 hover:border-gray-300"}  rounded-xl sm:rounded-2xl border transition-all duration-200 p-3 sm:p-4`}
                             >
-                                {/* Desktop Layout */}
                                 <div className="hidden lg:flex items-center justify-between">
                                     <div className="flex items-center space-x-4 flex-1">
                                         <div className={`
@@ -133,9 +162,9 @@ const YourFiles: React.FC<YourFilesProps> = ({ uploadDone }) => {
                                         </div>
                                     
                                         <div className="flex-1 min-w-0">
-                                            <h3 className="font-semibold text-gray-900 truncate text-lg" title={file.metadata.file_name}>
-                                                {file.metadata.file_name.length > 40 
-                                                    ? file.metadata.file_name.slice(0, 40) + "..."
+                                            <h3 className={`font-semibold ${theme === "dark" ? "text-gray-300" : "text-gray-900"} truncate text-lg`} title={file.metadata.file_name}>
+                                                {file.metadata.file_name.length >30 
+                                                    ? file.metadata.file_name.slice(0, 27) + "..."
                                                     : file.metadata.file_name
                                                 }
                                             </h3>
@@ -143,7 +172,7 @@ const YourFiles: React.FC<YourFilesProps> = ({ uploadDone }) => {
                                                 <p className="text-sm text-gray-500">
                                                     {formatFileSize(file.metadata.file_size)}
                                                 </p>
-                                                <div className="w-1 h-1 bg-gray-300 rounded-full" />
+                                                <div className={`w-1 h-1 ${theme === "dark" ? "bg-gray-600 " : "bg-gray-300 "}rounded-full`} />
                                                 <span className={`px-2 py-0.5 rounded-md text-xs font-medium ${getFileTypeBadge(fileTypeInfo.type)}`}>
                                                     {getFileExtension(file.metadata.file_name).toUpperCase() || 'FILE'}
                                                 </span>
@@ -160,7 +189,7 @@ const YourFiles: React.FC<YourFilesProps> = ({ uploadDone }) => {
                                             <button
                                                 onClick={() => downloadFile(file.metadata.file_id, file.metadata.file_name)}
                                                 disabled={isDownloading}
-                                                className="w-10 h-10 bg-white hover:bg-blue-50 border border-gray-200 hover:border-blue-200 rounded-xl flex items-center justify-center text-gray-600 hover:text-blue-600 transition-all duration-200 shadow-sm"
+                                                className={`w-10 h-10 ${theme === "dark" ? "bg-gradient-to-br from-gray-700 to gray-100 text-white hover:bg-blue-800 hover:text-red-100" : "bg-white hover:bg-blue-50 border border-gray-200 hover:border-blue-200 hover:text-blue-600 text-gray-600"} rounded-xl flex items-center justify-center  transition-all duration-200 shadow-sm `}
                                                 title="Download file"
                                             >
                                                 {isDownloading ? (
@@ -172,7 +201,7 @@ const YourFiles: React.FC<YourFilesProps> = ({ uploadDone }) => {
 
                                             <button
                                                 onClick={() => openDeleteDialog(file.metadata.file_id)}
-                                                className="w-10 h-10 bg-white hover:bg-red-50 border border-gray-200 hover:border-red-200 rounded-xl flex items-center justify-center text-gray-600 hover:text-red-600 transition-all duration-200 shadow-sm"
+                                                className={`w-10 h-10 ${theme === "dark" ? "bg-gradient-to-br from-gray-700 to gray-100 text-white hover:bg-red-800 hover:text-red-100" : "bg-white hover:bg-red-50 border border-gray-200 hover:border-red-200 hover:text-red-600 text-gray-600"}  rounded-xl flex items-center justify-center transition-all duration-200 shadow-sm`}
                                                 title="Delete file"
                                             >
                                                 <MdOutlineDelete size={18} />
@@ -181,9 +210,7 @@ const YourFiles: React.FC<YourFilesProps> = ({ uploadDone }) => {
                                     </div>
                                 </div>
 
-                                {/* Mobile/Tablet Layout */}
                                 <div className="lg:hidden">
-                                    {/* Top Row */}
                                     <div className="flex items-start justify-between mb-3">
                                         <div className="flex items-center space-x-3 flex-1 min-w-0">
                                             <div className={`
@@ -193,9 +220,8 @@ const YourFiles: React.FC<YourFilesProps> = ({ uploadDone }) => {
                                             `}>
                                                 <IconComponent size={18} />
                                             </div>
-                                        
                                             <div className="flex-1 min-w-0">
-                                                <h3 className="font-semibold text-gray-900 truncate text-sm sm:text-base" title={file.metadata.file_name}>
+                                                <h3 className={`font-semibold ${theme === "dark" ? "text-gray-200" : "text-gray-900"} truncate text-sm sm:text-base`} title={file.metadata.file_name}>
                                                     {file.metadata.file_name.length > 25 
                                                         ? file.metadata.file_name.slice(0, 25) + "..."
                                                         : file.metadata.file_name
@@ -224,7 +250,7 @@ const YourFiles: React.FC<YourFilesProps> = ({ uploadDone }) => {
                                         <button
                                             onClick={() => downloadFile(file.metadata.file_id, file.metadata.file_name)}
                                             disabled={isDownloading}
-                                            className="flex items-center space-x-2 px-3 sm:px-4 py-2 bg-white hover:bg-blue-50 border border-gray-200 hover:border-blue-200 rounded-lg text-gray-600 hover:text-blue-600 transition-all duration-200 shadow-sm text-sm"
+                                            className={`flex items-center space-x-2 px-3 sm:px-4 py-2 ${theme === "dark" ? "bg-gradient-to-br from-gray-700 to gray-100 text-white hover:bg-blue-800 hover:text-red-100" : "bg-white hover:bg-blue-50 border border-gray-200 hover:border-blue-200 text-gray-600 hover:text-blue-600"} rounded-lg transition-all duration-200 shadow-sm text-sm`}
                                         >
                                             {isDownloading ? (
                                                 <>
@@ -241,7 +267,7 @@ const YourFiles: React.FC<YourFilesProps> = ({ uploadDone }) => {
 
                                         <button
                                             onClick={() => openDeleteDialog(file.metadata.file_id)}
-                                            className="flex items-center space-x-2 px-3 sm:px-4 py-2 bg-white hover:bg-red-50 border border-gray-200 hover:border-red-200 rounded-lg text-gray-600 hover:text-red-600 transition-all duration-200 shadow-sm text-sm"
+                                            className={`flex items-center space-x-2 px-3 sm:px-4 py-2 ${theme === "dark" ? "bg-gradient-to-br from-gray-700 to gray-100 text-white hover:bg-red-800 hover:text-red-100" : "bg-white hover:bg-red-50 border border-gray-200 hover:border-red-200 text-gray-600 hover:text-red-600"} rounded-lg transition-all duration-200 shadow-sm text-sm`}
                                         >
                                             <MdOutlineDelete size={16} />
                                             <span className="hidden sm:inline">Delete</span>
@@ -253,7 +279,6 @@ const YourFiles: React.FC<YourFilesProps> = ({ uploadDone }) => {
                     })}
                 </div>
                 
-                {/* Empty State */}
                 {files.length === 0 && (
                     <div className="text-center py-8 sm:py-12 lg:py-16">
                         <div className={`${theme === 'dark' ? 'bg-gray-900 text-gray-100' : 'bg-gradient-to-br from-gray-100 to-gray-200'} w-12 h-12 sm:w-16 sm:h-16 rounded-full flex items-center justify-center mx-auto mb-3 sm:mb-4 shadow-lg`}>
